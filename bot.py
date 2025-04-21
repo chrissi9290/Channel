@@ -13,18 +13,22 @@ bot = telegram.Bot(token=BOT_TOKEN)
 gepostete_pairs = set()
 
 # --------------------------------
-# DexScreener – Neue Listings
+# DexScreener – Neue Listings (Debug-Version)
 # --------------------------------
 def fetch_dexscreener():
     while True:
         try:
+            print("[DexScreener] Hole Daten...")
             response = requests.get('https://api.dexscreener.com/latest/dex/pairs')
             data = response.json()
 
-            for pair in data.get('pairs', []):
+            pairs = data.get('pairs', [])
+            print(f"[DexScreener] Gefundene Paare: {len(pairs)}")
+
+            for pair in pairs:
                 pair_id = pair.get('pairAddress')
                 if pair_id in gepostete_pairs:
-                    continue
+                    continue  # Zum Testen auskommentieren, falls nötig
 
                 name = pair.get('baseToken', {}).get('name', 'Unbekannt')
                 symbol = pair.get('baseToken', {}).get('symbol', '')
@@ -34,7 +38,8 @@ def fetch_dexscreener():
                 fdv = float(pair.get('fdv', 0) or 0)
                 volume = float(pair.get('volume', {}).get('h24', 0))
                 chart_url = f"https://dexscreener.com/{chain}/{pair_id}?interval=5m"
-                url = pair.get('url', chart_url)
+
+                print(f"[DexScreener] {symbol} auf {chain} – ${price}")
 
                 nachricht = (
                     f"🚀 *Neuer Coin gelistet!*\n\n"
@@ -54,16 +59,17 @@ def fetch_dexscreener():
             time.sleep(60)
 
         except Exception as e:
-            print(f"DexScreener Fehler: {e}")
+            print(f"[DexScreener Fehler] {e}")
             time.sleep(30)
 
 # --------------------------------
-# Pump.fun – WebSocket live
+# Pump.fun WebSocket
 # --------------------------------
 async def pumpfun_listener():
     uri = "wss://pumpportal.fun/api/data"
     try:
         async with websockets.connect(uri) as websocket:
+            print("[Pump.fun] WebSocket verbunden...")
             await websocket.send(json.dumps({"method": "subscribeNewToken"}))
             while True:
                 msg = await websocket.recv()
@@ -76,6 +82,8 @@ async def pumpfun_listener():
                     mint = token.get("mint", "")
                     liquidity = token.get("liquidity", {}).get("baseTokenAmount", 0)
                     chart_url = f"https://pump.fun/{mint}"
+
+                    print(f"[Pump.fun] Neuer Token: {symbol} ({mint})")
 
                     nachricht = (
                         f"🚀 *Neuer Pump.fun Token gelistet!*\n\n"
@@ -91,17 +99,18 @@ async def pumpfun_listener():
                     bot.send_message(chat_id=CHANNEL_USERNAME, text=nachricht, parse_mode=telegram.ParseMode.MARKDOWN)
 
     except Exception as e:
-        print(f"Pump.fun Fehler: {e}")
+        print(f"[Pump.fun Fehler] {e}")
         await asyncio.sleep(10)
         await pumpfun_listener()
 
 # --------------------------------
-# Top 10 Coins nach 1h-Gewinn
+# Top 10 Gainer (1h) – direkt beim Start + jede Stunde
 # --------------------------------
 def post_top_10_gainers():
     first_run = True
     while True:
         try:
+            print("[Top10] Hole DexScreener-Daten für Ranking...")
             response = requests.get('https://api.dexscreener.com/latest/dex/pairs')
             data = response.json()
             pairs = data.get('pairs', [])
@@ -119,7 +128,7 @@ def post_top_10_gainers():
             top_10 = sorted(filtered, key=lambda x: x[0], reverse=True)[:10]
 
             if not top_10:
-                print("Keine passenden Top 10 gefunden.")
+                print("[Top10] Keine Top Coins gefunden.")
                 time.sleep(3600)
                 continue
 
@@ -133,11 +142,11 @@ def post_top_10_gainers():
                 message += f"{idx}. [{name} ({symbol})]({url}) – *+{change:.1f}%* – ${price:.6f} – #{chain.lower()}\n"
 
             message += "\n#crypto #gainers #trending"
-
+            print("[Top10] Sende Liste an Telegram.")
             bot.send_message(chat_id=CHANNEL_USERNAME, text=message, parse_mode=telegram.ParseMode.MARKDOWN)
 
         except Exception as e:
-            print(f"Top10 Fehler: {e}")
+            print(f"[Top10 Fehler] {e}")
 
         time.sleep(3600 if not first_run else 0)
         first_run = False
