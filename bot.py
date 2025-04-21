@@ -8,7 +8,7 @@ CHANNEL_USERNAME = '@DiamondCal'
 bot = telegram.Bot(token=BOT_TOKEN)
 gepostete_pairs = set()
 
-bot.send_message(chat_id='@DiamondCal', text='Bot wurde erfolgreich gestartet!')
+
 
 while True:
     try:
@@ -42,4 +42,4 @@ while True:
         time.sleep(30)
         
         
-        bot.send_message(chat_id='@DiamondCal', text='Bot wurde erfolgreich gestartet!')
+
