@@ -1,14 +1,31 @@
 import requests
 import time
 import telegram
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+import os
 
-# Telegram Bot Konfiguration
+# Bot config
 BOT_TOKEN = '7807606650:AAHv4hr01aqQzrj5u3CwldPVCj-iKGVFWzI'
 CHANNEL_USERNAME = '@DiamondCal'
-
 bot = telegram.Bot(token=BOT_TOKEN)
 
-# Bereits gepostete Token merken (damit kein Spam)
+# Screenshot-Funktion (DexScreener Chart)
+def screenshot_chart(url, filename='chart.png'):
+    options = Options()
+    options.headless = True
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument("--window-size=1200,800")
+    
+    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+    driver.get(url)
+    time.sleep(5)  # warten, bis Seite geladen ist
+    driver.save_screenshot(filename)
+    driver.quit()
+    return filename
+
 gepostete_pairs = set()
 
 while True:
@@ -31,7 +48,6 @@ while True:
             url = pair.get('url', 'https://dexscreener.com')
             chart_url = f"https://dexscreener.com/{chain}/{pair_id}?interval=5m"
 
-            # Formatierte Telegram-Nachricht
             nachricht = (
                 f"🚀 *Neuer Coin gelistet!*\n\n"
                 f"*Name:* {name} ({symbol})\n"
@@ -40,13 +56,20 @@ while True:
                 f"*Liquidity:* ${liquidity:,.0f}\n"
                 f"*FDV (Market Cap):* ${fdv:,.0f}\n"
                 f"*Volumen (24h):* ${volume:,.0f}\n\n"
-                f"[📊 5-Minuten-Chart ansehen]({chart_url})\n"
+                f"[📊 5-Minuten-Chart öffnen]({chart_url})\n"
                 f"[➡️ DexScreener öffnen]({url})\n\n"
                 f"#crypto #listing #{symbol.lower()} #{chain.lower()}"
             )
 
-            bot.send_message(chat_id=CHANNEL_USERNAME, text=nachricht, parse_mode=telegram.ParseMode.MARKDOWN)
+            # Screenshot vom Chart holen
+            chart_file = screenshot_chart(chart_url)
+
+            # Bild + Text an Telegram senden
+            with open(chart_file, 'rb') as img:
+                bot.send_photo(chat_id=CHANNEL_USERNAME, photo=img, caption=nachricht, parse_mode=telegram.ParseMode.MARKDOWN)
+
             gepostete_pairs.add(pair_id)
+            os.remove(chart_file)  # aufräumen
 
         time.sleep(60)
 
