@@ -99,6 +99,7 @@ async def pumpfun_listener():
 # Top 10 Coins nach 1h-Gewinn
 # --------------------------------
 def post_top_10_gainers():
+    first_run = True
     while True:
         try:
             response = requests.get('https://api.dexscreener.com/latest/dex/pairs')
@@ -118,6 +119,7 @@ def post_top_10_gainers():
             top_10 = sorted(filtered, key=lambda x: x[0], reverse=True)[:10]
 
             if not top_10:
+                print("Keine passenden Top 10 gefunden.")
                 time.sleep(3600)
                 continue
 
@@ -137,7 +139,8 @@ def post_top_10_gainers():
         except Exception as e:
             print(f"Top10 Fehler: {e}")
 
-        time.sleep(3600)  # 60 Minuten warten
+        time.sleep(3600 if not first_run else 0)
+        first_run = False
 
 # --------------------------------
 # Threads starten
