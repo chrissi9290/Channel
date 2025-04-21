@@ -5,17 +5,24 @@ import asyncio
 import websockets
 import json
 from threading import Thread
+from datetime import datetime
 
 BOT_TOKEN = '7807606650:AAHv4hr01aqQzrj5u3CwldPVCj-iKGVFWzI'
 CHANNEL_USERNAME = '@DiamondCal'
 bot = telegram.Bot(token=BOT_TOKEN)
 
+# Zeitstempel für Status-Check
+last_dex_check = "–"
+last_pump_event = "–"
+last_top10_post = "–"
+
 gepostete_pairs = set()
 
 # --------------------------------
-# DexScreener – Neue Listings (Debug-Version)
+# DexScreener – Neue Listings
 # --------------------------------
 def fetch_dexscreener():
+    global last_dex_check
     while True:
         try:
             print("[DexScreener] Hole Daten...")
@@ -25,10 +32,12 @@ def fetch_dexscreener():
             pairs = data.get('pairs', [])
             print(f"[DexScreener] Gefundene Paare: {len(pairs)}")
 
+            last_dex_check = datetime.now().strftime("%H:%M:%S")
+
             for pair in pairs:
                 pair_id = pair.get('pairAddress')
                 if pair_id in gepostete_pairs:
-                    continue  # Zum Testen auskommentieren, falls nötig
+                    continue
 
                 name = pair.get('baseToken', {}).get('name', 'Unbekannt')
                 symbol = pair.get('baseToken', {}).get('symbol', '')
@@ -38,8 +47,6 @@ def fetch_dexscreener():
                 fdv = float(pair.get('fdv', 0) or 0)
                 volume = float(pair.get('volume', {}).get('h24', 0))
                 chart_url = f"https://dexscreener.com/{chain}/{pair_id}?interval=5m"
-
-                print(f"[DexScreener] {symbol} auf {chain} – ${price}")
 
                 nachricht = (
                     f"🚀 *Neuer Coin gelistet!*\n\n"
@@ -63,9 +70,10 @@ def fetch_dexscreener():
             time.sleep(30)
 
 # --------------------------------
-# Pump.fun WebSocket
+# Pump.fun – WebSocket live
 # --------------------------------
 async def pumpfun_listener():
+    global last_pump_event
     uri = "wss://pumpportal.fun/api/data"
     try:
         async with websockets.connect(uri) as websocket:
@@ -83,7 +91,7 @@ async def pumpfun_listener():
                     liquidity = token.get("liquidity", {}).get("baseTokenAmount", 0)
                     chart_url = f"https://pump.fun/{mint}"
 
-                    print(f"[Pump.fun] Neuer Token: {symbol} ({mint})")
+                    last_pump_event = datetime.now().strftime("%H:%M:%S")
 
                     nachricht = (
                         f"🚀 *Neuer Pump.fun Token gelistet!*\n\n"
@@ -104,9 +112,10 @@ async def pumpfun_listener():
         await pumpfun_listener()
 
 # --------------------------------
-# Top 10 Gainer (1h) – direkt beim Start + jede Stunde
+# Top 10 Coins nach 1h-Gewinn
 # --------------------------------
 def post_top_10_gainers():
+    global last_top10_post
     first_run = True
     while True:
         try:
@@ -142,7 +151,9 @@ def post_top_10_gainers():
                 message += f"{idx}. [{name} ({symbol})]({url}) – *+{change:.1f}%* – ${price:.6f} – #{chain.lower()}\n"
 
             message += "\n#crypto #gainers #trending"
-            print("[Top10] Sende Liste an Telegram.")
+
+            last_top10_post = datetime.now().strftime("%H:%M:%S")
+            print("[Top10] Liste gesendet.")
             bot.send_message(chat_id=CHANNEL_USERNAME, text=message, parse_mode=telegram.ParseMode.MARKDOWN)
 
         except Exception as e:
@@ -150,6 +161,27 @@ def post_top_10_gainers():
 
         time.sleep(3600 if not first_run else 0)
         first_run = False
+
+# --------------------------------
+# /status Command
+# --------------------------------
+from telegram.ext import Updater, CommandHandler
+
+def status_handler(update, context):
+    message = (
+        f"✅ *Bot-Status:*\n\n"
+        f"• DexScreener zuletzt geprüft: `{last_dex_check}`\n"
+        f"• Pump.fun letztes Event: `{last_pump_event}`\n"
+        f"• Top 10 zuletzt gepostet: `{last_top10_post}`"
+    )
+    context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=telegram.ParseMode.MARKDOWN)
+
+def telegram_commands():
+    updater = Updater(BOT_TOKEN, use_context=True)
+    dp = updater.dispatcher
+    dp.add_handler(CommandHandler("status", status_handler))
+    updater.start_polling()
+    updater.idle()
 
 # --------------------------------
 # Threads starten
@@ -167,3 +199,4 @@ if __name__ == '__main__':
     Thread(target=start_dexscreener).start()
     Thread(target=start_pumpfun).start()
     Thread(target=start_top10).start()
+    Thread(target=telegram_commands).start()
