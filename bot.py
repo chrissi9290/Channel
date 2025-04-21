@@ -6,12 +6,13 @@ import websockets
 import json
 from threading import Thread
 from datetime import datetime
+from telegram.ext import Updater, CommandHandler
 
 BOT_TOKEN = '7807606650:AAHv4hr01aqQzrj5u3CwldPVCj-iKGVFWzI'
 CHANNEL_USERNAME = '@DiamondCal'
 bot = telegram.Bot(token=BOT_TOKEN)
 
-# Zeitstempel für Status-Check
+# Zeitstempel für Statusbefehl
 last_dex_check = "–"
 last_pump_event = "–"
 last_top10_post = "–"
@@ -23,16 +24,14 @@ gepostete_pairs = set()
 # --------------------------------
 def fetch_dexscreener():
     global last_dex_check
+    print("[DexScreener] gestartet.")
     while True:
         try:
-            print("[DexScreener] Hole Daten...")
             response = requests.get('https://api.dexscreener.com/latest/dex/pairs')
             data = response.json()
-
             pairs = data.get('pairs', [])
-            print(f"[DexScreener] Gefundene Paare: {len(pairs)}")
-
             last_dex_check = datetime.now().strftime("%H:%M:%S")
+            print(f"[DexScreener] {len(pairs)} Paare gefunden")
 
             for pair in pairs:
                 pair_id = pair.get('pairAddress')
@@ -74,10 +73,10 @@ def fetch_dexscreener():
 # --------------------------------
 async def pumpfun_listener():
     global last_pump_event
+    print("[Pump.fun] gestartet.")
     uri = "wss://pumpportal.fun/api/data"
     try:
         async with websockets.connect(uri) as websocket:
-            print("[Pump.fun] WebSocket verbunden...")
             await websocket.send(json.dumps({"method": "subscribeNewToken"}))
             while True:
                 msg = await websocket.recv()
@@ -116,10 +115,10 @@ async def pumpfun_listener():
 # --------------------------------
 def post_top_10_gainers():
     global last_top10_post
+    print("[Top10] gestartet.")
     first_run = True
     while True:
         try:
-            print("[Top10] Hole DexScreener-Daten für Ranking...")
             response = requests.get('https://api.dexscreener.com/latest/dex/pairs')
             data = response.json()
             pairs = data.get('pairs', [])
@@ -135,6 +134,7 @@ def post_top_10_gainers():
                     continue
 
             top_10 = sorted(filtered, key=lambda x: x[0], reverse=True)[:10]
+            last_top10_post = datetime.now().strftime("%H:%M:%S")
 
             if not top_10:
                 print("[Top10] Keine Top Coins gefunden.")
@@ -152,8 +152,6 @@ def post_top_10_gainers():
 
             message += "\n#crypto #gainers #trending"
 
-            last_top10_post = datetime.now().strftime("%H:%M:%S")
-            print("[Top10] Liste gesendet.")
             bot.send_message(chat_id=CHANNEL_USERNAME, text=message, parse_mode=telegram.ParseMode.MARKDOWN)
 
         except Exception as e:
@@ -165,8 +163,6 @@ def post_top_10_gainers():
 # --------------------------------
 # /status Command
 # --------------------------------
-from telegram.ext import Updater, CommandHandler
-
 def status_handler(update, context):
     message = (
         f"✅ *Bot-Status:*\n\n"
