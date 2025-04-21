@@ -38,3 +38,6 @@ while True:
     except Exception as e:
         print(f"Fehler: {e}")
         time.sleep(30)
+        
+        
+        bot.send_message(chat_id='@DiamondCal', text='Bot wurde erfolgreich gestartet!')
